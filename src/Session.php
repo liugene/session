@@ -1,109 +1,208 @@
 <?php
 
-/**
- * --------------------------------------------------*
- *  LhinkPHP遵循Apache2开源协议发布  Link ALL Thing  *
- * --------------------------------------------------*
- *  @author LiuJun     Mail-To:liujun2199@vip.qq.com *
- * --------------------------------------------------*
- * Copyright (c) 2017 LinkPHP. All rights reserved.  *
- * --------------------------------------------------*
- *            LinkPHP框架session 入库工具类          *
- * --------------------------------------------------*
- */
+namespace linkphp\session;
 
-namespace linkphp\system\session;
+use framework\Exception;
 
-use linkphp\boot\Config;
+use Config;
 
-class Session{
-    private $_dao;
+class Session
+{
+
+    private $config = [];
+
+    private $prefix = '';
+
+    public function import($config)
+    {
+        if(is_array($config) && empty($this->config)) $this->config = $config;
+    }
     
     public function __construct()
     {
+        if(empty($this->config)){
+            $this->config = Config::get('session.');
+        }
         /**
          * 开启session机制
          */
-        if(Config::get('session_on')){
+        if($this->config['session_on']){
             session_start();
         }
-        //设置session处理器
-        ini_set('session.save_handle','user');
-        session_set_save_handler(
-            array($this,'userSessionBegin'),
-            array($this,'userSessionEnd'),
-            array($this,'userSessionRead'),
-            array($this,'userSessionWrite'),
-            array($this,'userSessionDelete'),
-            array($this,'userSessionGC')
-        );
+        if (!empty($this->config['type'])) {
+            // 读取session驱动
+            $class = false !== strpos($this->config['type'], '\\') ? $this->config['type'] : '\\linkphp\\session\\storage\\' . ucwords($this->config['type']);
+
+            // 检查驱动类
+            if (!class_exists($class) || !session_set_save_handler(new $class($this->config))) {
+                throw new Exception('error session handler:' . $class, $class);
+            }
+        }
     }
-    /**
- * @author liujun
- * @copyright 2017
- * session数据表
- * create table if not exists fly_session(
- *   session_id varchar(40) not null default '' comment 'sessionID';
- *   session_content text;
- *   last_time int not null default '0' comment '最后处理时间';
- * primary key(session_id) 
- * )engine=MyISAM default charset=utf8 comment session数据表'';
- */
 
+    /**
+     * 设置或者获取session作用域（前缀）
+     * @param string $prefix
+     * @return string|void
+     */
+    public function prefix($prefix = '')
+    {
+        if (empty($prefix) && null !== $prefix) {
+            return $this->prefix;
+        } else {
+            $this->prefix = $prefix;
+        }
+    }
 
-function userSessionBegin(){
-    
-}
-function userSessionEnd(){
-    
-}
-function userSessionRead($sess_id){
     /**
-     * 读操作
-     * 执行时机：当session机制开启时
-     * 工作：    从session数据区中读取数据
-     * @param $sess_id string
-     * @return string
+     * session设置
+     * @param string        $name session名称
+     * @param mixed         $value session值
+     * @param string|null   $prefix 作用域（前缀）
+     * @return void
      */
-     //初始化数据库服务器连接
-     //查询
-    
-}
-function userSessionWrite($sess_id,$sess_content){
+    public function set($name, $value = '', $prefix = null)
+    {
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+        if (strpos($name, '.')) {
+            // 二维数组赋值
+            list($name1, $name2) = explode('.', $name);
+            if ($prefix) {
+                $_SESSION[$prefix][$name1][$name2] = $value;
+            } else {
+                $_SESSION[$name1][$name2] = $value;
+            }
+        } elseif ($prefix) {
+            $_SESSION[$prefix][$name] = $value;
+        } else {
+            $_SESSION[$name] = $value;
+        }
+    }
+
     /**
-     * 更新操作
-     * 执行时机：   脚本周期结束时，php在整理收尾时
-     * 工作：       将当前脚本处理好的session数据，持久化存储在数据库中
-     * @param $sess_id string
-     * @param $sess_content text
-     * @return bool 
+     * session获取
+     * @param string        $name session名称
+     * @param string|null   $prefix 作用域（前缀）
+     * @return mixed
      */
-     //初始化数据库服务器连接
-     //插入或更新数据
-}
-function userSessionDelete($sess_id){
+    public function get($name = '', $prefix = null)
+    {
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+        if ('' == $name) {
+            // 获取全部的session
+            $value = $prefix ? (!empty($_SESSION[$prefix]) ? $_SESSION[$prefix] : []) : $_SESSION;
+        } elseif ($prefix) {
+            // 获取session
+            if (strpos($name, '.')) {
+                list($name1, $name2) = explode('.', $name);
+                $value               = isset($_SESSION[$prefix][$name1][$name2]) ? $_SESSION[$prefix][$name1][$name2] : null;
+            } else {
+                $value = isset($_SESSION[$prefix][$name]) ? $_SESSION[$prefix][$name] : null;
+            }
+        } else {
+            if (strpos($name, '.')) {
+                list($name1, $name2) = explode('.', $name);
+                $value               = isset($_SESSION[$name1][$name2]) ? $_SESSION[$name1][$name2] : null;
+            } else {
+                $value = isset($_SESSION[$name]) ? $_SESSION[$name] : null;
+            }
+        }
+        return $value;
+    }
+
     /**
-     * 删除操作
-     * 执行时机：   调用了session_destroy()销毁session过程中被调用
-     * 工作：       删除当前session的数据区（记录）
-     * @param $sess_id string
-     * @return bool 
+     * 删除session数据
+     * @param string|array  $name session名称
+     * @param string|null   $prefix 作用域（前缀）
+     * @return void
      */
-     //初始化数据库服务器连接
-     //删除语句
-    
-}
-function userSessionGC($sess_id){
-     /**
-     * 删除数据库session表字段内容操作
-     * 执行时机：   最后一次写入操作大于最大存活时间则删除
-     * 工作：       删除当前session的数据库字段内容（记录）
-     * @param $sess_id string
-     * @return bool 
+    public function delete($name, $prefix = null)
+    {
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+        if (is_array($name)) {
+            foreach ($name as $key) {
+                $this->delete($key, $prefix);
+            }
+        } elseif (strpos($name, '.')) {
+            list($name1, $name2) = explode('.', $name);
+            if ($prefix) {
+                unset($_SESSION[$prefix][$name1][$name2]);
+            } else {
+                unset($_SESSION[$name1][$name2]);
+            }
+        } else {
+            if ($prefix) {
+                unset($_SESSION[$prefix][$name]);
+            } else {
+                unset($_SESSION[$name]);
+            }
+        }
+    }
+
+    /**
+     * 清空session数据
+     * @param string|null   $prefix 作用域（前缀）
+     * @return void
      */
-     //初始化数据库服务器连接
-     //判断时间执行删除语句
-    
-}
+    public function clear($prefix = null)
+    {
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+        if ($prefix) {
+            unset($_SESSION[$prefix]);
+        } else {
+            $_SESSION = [];
+        }
+    }
+
+    /**
+     * 判断session数据
+     * @param string        $name session名称
+     * @param string|null   $prefix
+     * @return bool
+     */
+    public function has($name, $prefix = null)
+    {
+        $prefix = !is_null($prefix) ? $prefix : $this->prefix;
+        if (strpos($name, '.')) {
+            // 支持数组
+            list($name1, $name2) = explode('.', $name);
+            return $prefix ? isset($_SESSION[$prefix][$name1][$name2]) : isset($_SESSION[$name1][$name2]);
+        } else {
+            return $prefix ? isset($_SESSION[$prefix][$name]) : isset($_SESSION[$name]);
+        }
+    }
+
+    /**
+     * 销毁session
+     * @return void
+     */
+    public static function destroy()
+    {
+        if (!empty($_SESSION)) {
+            $_SESSION = [];
+        }
+        session_unset();
+        session_destroy();
+    }
+
+    /**
+     * 重新生成session_id
+     * @param bool $delete 是否删除关联会话文件
+     * @return void
+     */
+    public function regenerate($delete = false)
+    {
+        session_regenerate_id($delete);
+    }
+
+    /**
+     * 暂停session
+     * @return void
+     */
+    public static function pause()
+    {
+        // 暂停session
+        session_write_close();
+    }
     
 }
