@@ -29,6 +29,42 @@ class Session
         if($this->config['session_on']){
             session_start();
         }
+
+        if (isset($this->config['prefix']) && ('' === $this->prefix || null === $this->prefix)) {
+            $this->prefix = $this->config['prefix'];
+        }
+
+        if (isset($this->config['var_session_id']) && isset($_REQUEST[$this->config['var_session_id']])) {
+            session_id($_REQUEST[$this->config['var_session_id']]);
+        } elseif (isset($this->config['id']) && !empty($this->config['id'])) {
+            session_id($this->config['id']);
+        }
+
+        if (isset($this->config['name'])) {
+            session_name($this->config['name']);
+        }
+
+        if (isset($this->config['path'])) {
+            session_save_path($this->config['path']);
+        }
+
+        if (isset($this->config['domain'])) {
+            ini_set('session.cookie_domain', $this->config['domain']);
+        }
+
+        if (isset($this->config['expire'])) {
+            ini_set('session.gc_maxlifetime', $this->config['expire']);
+            ini_set('session.cookie_lifetime', $this->config['expire']);
+        }
+
+        if (isset($this->config['secure'])) {
+            ini_set('session.cookie_secure', $this->config['secure']);
+        }
+
+        if (isset($this->config['httponly'])) {
+            ini_set('session.cookie_httponly', $this->config['httponly']);
+        }
+
         if (!empty($this->config['type'])) {
             // 读取session驱动
             $class = false !== strpos($this->config['type'], '\\') ? $this->config['type'] : '\\linkphp\\session\\storage\\' . ucwords($this->config['type']);
